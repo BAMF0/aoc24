@@ -1,28 +1,35 @@
 {
   description = "Nix flake for CUDA development";
-
   inputs = {
-    nixpkgs.url = "nixpkgs/unstable";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+    utils.url = "github:numtide/flake-utils";
   };
 
-  outputs = { self, nixpkgs }: {
-    devShells.default = nixpkgs.lib.mkShell {
-      packages = with nixpkgs.pkgs; [
-        cuda                        # CUDA toolkit
-        gcc                         # GNU C Compiler
-        gdb                         # Debugger
-        ninja                       # Optional build system
-        cmake                       # CMake for building projects
-        nvtop                       # Monitor GPU usage
-      ];
-
-      # Optional: Add environment variables needed for CUDA development
-      shellHook = ''
-        export PATH=${nixpkgs.pkgs.cuda}/bin:$PATH
-        export LD_LIBRARY_PATH=${nixpkgs.pkgs.cuda}/lib64:$LD_LIBRARY_PATH
-        echo "CUDA environment is ready!"
-      '';
-    };
-  };
+  outputs = { self, nixpkgs, utils }:
+    utils.lib.eachDefaultSystem (system:
+      let
+        pkgs = import nixpkgs { inherit system; };
+      in
+      {
+        devShell = with pkgs; mkShell {
+          allowUnfree = true;
+          packages = [
+             autoconf curl
+             procps gnumake util-linux m4 gperf unzip
+             cudaPackages.cudatoolkit cudaPackages.cudnn cudaPackages.cuda_cudart linuxPackages.nvidia_x11
+             libGLU libGL
+             xorg.libXi xorg.libXmu freeglut
+             xorg.libXext xorg.libX11 xorg.libXv xorg.libXrandr zlib 
+             ncurses5 stdenv.cc
+         ];
+         shellHook = ''
+            export CUDA_PATH=${pkgs.cudatoolkit}
+            export LD_LIBRARY_PATH=${pkgs.linuxPackages.nvidia_x11}/lib:${pkgs.ncurses5}/lib:$CUDA_PATH/lib:$LD_LIBRARY_PATH
+            export EXTRA_LDFLAGS="-L/lib -L${pkgs.linuxPackages.nvidia_x11}/lib -L/${pkgs.cudatoolkit}/lib"
+            export EXTRA_CCFLAGS="-I/usr/include"
+         '';
+        };
+      }
+    );
 }
 
