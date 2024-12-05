@@ -6,6 +6,17 @@
 #include <sstream>
 #include <string>
 
+#define CUDA_CHECK(call)                                    \
+    do {                                                    \
+        cudaError_t err = call;                             \
+        if (err != cudaSuccess) {                           \
+            std::cerr << "CUDA error at " << __FILE__       \
+                      << ":" << __LINE__ << ": "            \
+                      << cudaGetErrorString(err) << "\n";   \
+            exit(EXIT_FAILURE);                             \
+        }                                                   \
+    } while (0)
+
 // store number of occurrences of values in a at their value as index in 
 // out.
 // assume out has size of max(a)
@@ -18,6 +29,8 @@ void count_occurrences(int *out, int *a, int n)
         atomicAdd(&out[a[i]], 1);
 }
 
+// multiply every index in out by the occurrences in a and b,
+// return list of length n containing all products
 __global__
 void multiply_weighted_occurences(int *out, int *a, int *b, int n)
 {
@@ -41,8 +54,8 @@ int main()
     inputFile.clear();
 
     int *a, *b, *out_a, *out_b, *out_reduce;
-    cudaMallocManaged(&a, N*sizeof(int));
-    cudaMallocManaged(&b, N*sizeof(int));
+    CUDA_CHECK(cudaMallocManaged(&a, N*sizeof(int)));
+    CUDA_CHECK(cudaMallocManaged(&b, N*sizeof(int)));
     
     int i = 0;
     inputFile.open("input.txt");
@@ -60,27 +73,29 @@ int main()
 
     std::sort(a, a + N);
     std::sort(b, b + N);
-    int M = 1 + std::max(a[N-1], b[N-1]);
+    int M = std::max(a[N-1], b[N-1]);
     
     // initialize output
-    cudaMallocManaged(&out_a, M*sizeof(int));
-    cudaMallocManaged(&out_b, M*sizeof(int));
-    cudaMallocManaged(&out_reduce, M*sizeof(int));
-    cudaMemset(&out_a, 0, M*sizeof(int));
-    cudaMemset(&out_b, 0, M*sizeof(int));
-    cudaMemset(&out_reduce, 0, M*sizeof(int));
+    CUDA_CHECK(cudaMallocManaged(&out_a, M*sizeof(int)));
+    CUDA_CHECK(cudaMallocManaged(&out_b, M*sizeof(int)));
+    CUDA_CHECK(cudaMallocManaged(&out_reduce, M*sizeof(int)));
+    cudaMemset(out_a, 0, M*sizeof(int));
+    cudaMemset(out_b, 0, M*sizeof(int));
+    cudaMemset(out_reduce, 0, M*sizeof(int));
 
-    int blockSize = 512;
+    int blockSize = 256;
     int numBlocks = (N + blockSize - 1) / blockSize;
+
     count_occurrences<<<numBlocks, blockSize>>>(out_a, a, N);
     count_occurrences<<<numBlocks, blockSize>>>(out_b, b, N);
     cudaDeviceSynchronize();
-    multiply_weighted_occurences<<<numBlocks, blockSize>>>(out_reduce, a, b, M);
+
+    multiply_weighted_occurences<<<numBlocks, blockSize>>>(out_reduce, out_a, out_b, M);
     cudaDeviceSynchronize();
 
-
-    std::cout << "Answer: " << std::accumulate(out_reduce, out_reduce + M, 0) << std::endl;
-    std::cout << "biggest: " << std::max(out_reduce, out_reduce + M) << std::endl;
+    std::cout << "Answer: " 
+        << std::accumulate(out_reduce, out_reduce + M, 0) 
+        << std::endl;
 
     cudaFree(a);
     cudaFree(b);
