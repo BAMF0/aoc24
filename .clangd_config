@@ -1,0 +1,9 @@
+CompileFlags:
+  Add: 
+    - -stdlib=libc++
+    - -D__CUDACC__
+    - --cuda-path=/nix/store/53ww4g3wf0y5vxwmypw04q1a0h83qjfd-cuda-merged-12.4
+    - -x
+    - cuda
+    - --cuda-gpu-arch=sm_89
+    - -I/nix/store/53ww4g3wf0y5vxwmypw04q1a0h83qjfd-cuda-merged-12.4/include
